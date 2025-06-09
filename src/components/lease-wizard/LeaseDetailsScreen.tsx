@@ -8,10 +8,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Plus } from "lucide-react";
+import { CalendarIcon, Plus, Trash } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { LeaseData } from "../AddLeaseWizard";
+
+interface RentStep {
+  id: string;
+  monthlyRent: string;
+  fromDate?: Date;
+  toDate?: Date;
+}
 
 interface LeaseDetailsScreenProps {
   leaseData: LeaseData;
@@ -19,7 +26,14 @@ interface LeaseDetailsScreenProps {
 }
 
 const LeaseDetailsScreen = ({ leaseData, updateLeaseData }: LeaseDetailsScreenProps) => {
-  const [escalationSteps, setEscalationSteps] = useState(1);
+  const [rentSteps, setRentSteps] = useState<RentStep[]>([
+    {
+      id: '1',
+      monthlyRent: leaseData.baseRent || '',
+      fromDate: leaseData.commencementDate,
+      toDate: undefined
+    }
+  ]);
 
   const DatePickerField = ({ 
     label, 
@@ -60,6 +74,37 @@ const LeaseDetailsScreen = ({ leaseData, updateLeaseData }: LeaseDetailsScreenPr
     </div>
   );
 
+  const addRentStep = () => {
+    const newStep: RentStep = {
+      id: Date.now().toString(),
+      monthlyRent: '',
+      fromDate: undefined,
+      toDate: undefined
+    };
+    setRentSteps([...rentSteps, newStep]);
+  };
+
+  const removeRentStep = (id: string) => {
+    setRentSteps(rentSteps.filter(step => step.id !== id));
+  };
+
+  const updateRentStep = (id: string, field: keyof RentStep, value: any) => {
+    setRentSteps(rentSteps.map(step => 
+      step.id === id ? { ...step, [field]: value } : step
+    ));
+    
+    // Update the base rent in leaseData if it's the first step
+    if (id === '1' && field === 'monthlyRent') {
+      updateLeaseData({ baseRent: value });
+    }
+  };
+
+  // Update first rent step when commencement date changes
+  const handleCommencementDateChange = (date: Date | undefined) => {
+    updateLeaseData({ commencementDate: date });
+    updateRentStep('1', 'fromDate', date);
+  };
+
   return (
     <div className="space-y-8">
       <div>
@@ -91,7 +136,7 @@ const LeaseDetailsScreen = ({ leaseData, updateLeaseData }: LeaseDetailsScreenPr
           <DatePickerField
             label="Rent Commencement Date"
             value={leaseData.commencementDate}
-            onChange={(date) => updateLeaseData({ commencementDate: date })}
+            onChange={handleCommencementDateChange}
             placeholder="Select commencement date"
           />
         </div>
@@ -103,7 +148,7 @@ const LeaseDetailsScreen = ({ leaseData, updateLeaseData }: LeaseDetailsScreenPr
           Rent Schedule
         </h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-4">
           <div className="space-y-2">
             <Label>Lease Type</Label>
             <Select
@@ -120,81 +165,108 @@ const LeaseDetailsScreen = ({ leaseData, updateLeaseData }: LeaseDetailsScreenPr
               </SelectContent>
             </Select>
           </div>
-          
-          <div className="space-y-2">
-            <Label>Monthly Minimum Rent</Label>
-            <Input
-              type="number"
-              placeholder="0.00"
-              value={leaseData.baseRent || ""}
-              onChange={(e) => updateLeaseData({ baseRent: e.target.value })}
-              className="text-right"
-            />
-          </div>
-        </div>
 
-        {/* Rent Escalation */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label className="text-base">Add Rent Escalations?</Label>
-            <Switch
-              checked={leaseData.hasEscalations || false}
-              onCheckedChange={(checked) => updateLeaseData({ hasEscalations: checked })}
-            />
-          </div>
-          
-          {leaseData.hasEscalations && (
-            <div className="ml-4 p-4 bg-slate-50 rounded-lg space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Increase By</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      placeholder="3"
-                      value={leaseData.escalationAmount || ""}
-                      onChange={(e) => updateLeaseData({ escalationAmount: e.target.value })}
-                    />
-                    <Select
-                      value={leaseData.escalationType || "%"}
-                      onValueChange={(value) => updateLeaseData({ escalationType: value })}
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Enter the rent amount for each period of the lease term.
+            </p>
+            
+            {rentSteps.map((step, index) => (
+              <div key={step.id} className="p-4 border rounded-lg bg-slate-50 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-slate-900">
+                    {index === 0 ? 'Initial Rent Period' : `Rent Step ${index + 1}`}
+                  </h4>
+                  {index > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeRentStep(step.id)}
+                      className="text-red-600 hover:text-red-700"
                     >
-                      <SelectTrigger className="w-20">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="%">%</SelectItem>
-                        <SelectItem value="$">$</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
                 
-                <div className="space-y-2">
-                  <Label>Frequency</Label>
-                  <Select
-                    value={leaseData.escalationFrequency || ""}
-                    onValueChange={(value) => updateLeaseData({ escalationFrequency: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select frequency" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="annually">Annually</SelectItem>
-                      <SelectItem value="every-2-years">Every 2 Years</SelectItem>
-                      <SelectItem value="every-3-years">Every 3 Years</SelectItem>
-                      <SelectItem value="every-5-years">Every 5 Years</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Monthly Rent</Label>
+                    <Input
+                      type="number"
+                      placeholder="2,350.00"
+                      value={step.monthlyRent}
+                      onChange={(e) => updateRentStep(step.id, 'monthlyRent', e.target.value)}
+                      className="text-right"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>From</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !step.fromDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {step.fromDate ? format(step.fromDate, "PPP") : "Select date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={step.fromDate}
+                          onSelect={(date) => updateRentStep(step.id, 'fromDate', date)}
+                          initialFocus
+                          className="p-3 pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>To</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !step.toDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {step.toDate ? format(step.toDate, "PPP") : "Select date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={step.toDate}
+                          onSelect={(date) => updateRentStep(step.id, 'toDate', date)}
+                          initialFocus
+                          className="p-3 pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 </div>
               </div>
-              
-              <Button variant="outline" className="flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Add Another Escalation Step
-              </Button>
-            </div>
-          )}
+            ))}
+            
+            <Button
+              variant="outline"
+              onClick={addRentStep}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add Rent Step
+            </Button>
+          </div>
         </div>
       </div>
 
