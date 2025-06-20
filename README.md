@@ -1,4 +1,4 @@
-# Welcome to your Lovable project
+# This is the lease related feature for Vera Rent
 
 ## Project info
 
